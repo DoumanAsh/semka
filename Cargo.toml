@@ -1,0 +1,25 @@
+[package]
+name = "semka"
+version = "1.0.0"
+authors = ["Douman <douman@gmx.se>"]
+edition = "2018"
+description = "Semaphore implementation"
+readme = "README.md"
+repository = "https://github.com/DoumanAsh/semka"
+license = "BSL-1.0"
+include = [
+    "**/*.rs",
+    "Cargo.toml",
+    "README.md"
+]
+keywords = ["sync", "semaphore"]
+
+[target.'cfg(unix)'.dependencies.libc]
+version = "0.2"
+default-features = false
+
+[target.'cfg(unix)'.dependencies]
+error-code = "2"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
