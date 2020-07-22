@@ -26,7 +26,9 @@ impl super::Semaphore for Sem {
 
     fn wait(&self) {
         if self.is_zero() {
-            let _ = js_sys::Atomics::wait(&self.value, 0, 1);
+            if let Err(error) = js_sys::Atomics::wait(&self.value, 0, 1) {
+                panic!("Failed to await: {:?}", error);
+            }
         }
 
         let _ = js_sys::Atomics::sub(&self.value, 0, 1);
@@ -46,7 +48,7 @@ impl super::Semaphore for Sem {
         if self.is_zero() {
             let res = match js_sys::Atomics::wait_with_timeout(&self.value, 0, 1, timeout.as_millis() as _) {
                 Ok(res) => res,
-                Err(_) => unreachable!(),
+                Err(error) => panic!("Failed to await: {:?}", error),
             };
 
             if res == "timed-out" {

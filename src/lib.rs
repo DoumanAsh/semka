@@ -18,6 +18,11 @@
 //!### Mac
 //!
 //!Uses `mach` API which doesn't allow to access underlying value, resulting in `Semaphore::post` always returning `false`
+//!
+//!### WASM
+//!
+//!Relies on `Atomics` to implement semaphore logic.
+//!Due to how main thread works, some engines are likely to disallow blocking on the main thread
 
 #![no_std]
 #![warn(missing_docs)]
