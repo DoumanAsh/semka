@@ -17,10 +17,10 @@ pub struct Sem {
     handle: *mut c_void
 }
 
-impl super::Semaphore for Sem {
-    fn new() -> Option<Self> {
+impl super::CountingSemaphore for Sem {
+    fn new(init: u32) -> Option<Self> {
         let handle = unsafe {
-            CreateSemaphoreW(ptr::null_mut(), 0, 1, ptr::null())
+            CreateSemaphoreW(ptr::null_mut(), init as i32, i32::max_value(), ptr::null())
         };
 
         if handle.is_null() {
@@ -64,9 +64,10 @@ impl super::Semaphore for Sem {
     }
 
     fn signal(&self) {
-        unsafe {
+        let res = unsafe {
             ReleaseSemaphore(self.handle, 1, ptr::null_mut())
         };
+        debug_assert_ne!(res, 0);
     }
 }
 

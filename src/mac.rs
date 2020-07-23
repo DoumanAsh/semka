@@ -21,7 +21,7 @@ impl Into<TimeSpec> for core::time::Duration {
 }
 
 const KERN_OPERATION_TIMED_OUT: libc::c_int = 49;
-const SYNC_POLICY_PREPOST: libc::c_int = 0x04;
+const SYNC_POLICY_FIFO: libc::c_int = 0;
 
 extern "C" {
     static mach_task_self_: libc::c_uint;
@@ -29,7 +29,7 @@ extern "C" {
     //typedef struct semaphore *semaphore_t;
     //Function takes semaphore_t*
     fn semaphore_create(task: libc::c_uint, semaphore: *mut *mut c_void, policy: libc::c_int, value: libc::c_int) -> libc::c_int;
-    fn semaphore_signal_all(semaphore: *mut c_void) -> libc::c_int;
+    fn semaphore_signal(semaphore: *mut c_void) -> libc::c_int;
     fn semaphore_wait(semaphore: *mut c_void) -> libc::c_int;
     fn semaphore_timedwait(semaphore: *mut c_void, timeout: TimeSpec) -> libc::c_int;
     fn semaphore_destroy(task: libc::c_uint, semaphore: *mut c_void) -> libc::c_int;
@@ -40,12 +40,12 @@ pub struct Sem {
     handle: *mut c_void,
 }
 
-impl super::Semaphore for Sem {
-    fn new() -> Option<Self> {
+impl super::CountingSemaphore for Sem {
+    fn new(init: u32) -> Option<Self> {
         let mut handle = mem::MaybeUninit::uninit();
 
         let res = unsafe {
-            semaphore_create(mach_task_self_, handle.as_mut_ptr(), SYNC_POLICY_PREPOST, 0)
+            semaphore_create(mach_task_self_, handle.as_mut_ptr(), SYNC_POLICY_FIFO, init as libc::c_int)
         };
 
         match res {
@@ -80,7 +80,7 @@ impl super::Semaphore for Sem {
 
     fn signal(&self) {
         let res = unsafe {
-            semaphore_signal_all(self.handle)
+            semaphore_signal(self.handle)
         };
 
         debug_assert_eq!(res, 0);

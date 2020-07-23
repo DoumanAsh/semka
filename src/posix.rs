@@ -12,7 +12,7 @@ pub struct Sem {
     handle: UnsafeCell<libc::sem_t>,
 }
 
-impl super::Semaphore for Sem {
+impl super::CountingSemaphore for Sem {
     fn new(init: u32) -> Option<Self> {
         let mut handle = mem::MaybeUninit::uninit();
 
