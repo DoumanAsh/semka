@@ -72,6 +72,11 @@
 //!### No OS atomic
 //!
 //!Trivial atomic implementation that performs spin loop
+
+#![no_std]
+#![warn(missing_docs)]
+#![cfg_attr(feature = "cargo-clippy", allow(clippy::style))]
+
 #[cfg(any(all(unix, not(any(target_os = "macos", target_os = "ios"))), target_os = "fuchsia"))]
 mod posix;
 #[cfg(any(all(unix, not(any(target_os = "macos", target_os = "ios"))), target_os = "fuchsia"))]
@@ -120,6 +125,7 @@ impl<T: CountingSemaphore> BinarySemaphore for T {
     }
 }
 
+///Lock of [BinarySemaphore](trait.BinarySemaphore.html)
 pub struct BinaryLock<'a, T: BinarySemaphore> {
     sem: &'a T,
     unlock: fn(&'a T),

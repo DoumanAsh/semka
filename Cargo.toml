@@ -1,6 +1,6 @@
 [package]
 name = "semka"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Douman <douman@gmx.se>"]
 edition = "2018"
 description = "Semaphore implementation"
@@ -13,6 +13,7 @@ include = [
     "README.md"
 ]
 keywords = ["sync", "semaphore"]
+categories = ["concurrency", "no-std"]
 
 [target.'cfg(unix)'.dependencies.libc]
 version = "0.2"
