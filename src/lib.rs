@@ -1,4 +1,4 @@
-//!Semaphore primitive
+//!Semaphore primitive for Rust
 //!
 //!## Types
 //!
@@ -7,29 +7,55 @@
 //!
 //!#### Binary
 //!
-//!Binary semaphore is similar to that of `Mutex` as it allows singular lock & unlock.
+//!Binary semaphore is similar to the `Mutex` as it allows singular lock & unlock.
 //!
-//!This is the most approach that should work for most simple use cases (e.g. `Mutex`)
+//!This is the approach that should work for most simple use cases.
 //!
-//!This implementation is available for all targets
+//!This implementation is available for all targets.
+//!
+//!```rust
+//! use semka::{Sem, BinarySemaphore};
+//! let sem = Sem::new().unwrap();
+//!
+//! let _guard = sem.lock();
+//!
+//!```
 //!
 //!#### Counting Semaphore
 //!
 //!Semaphore state is expressed as atomic integer, which gets decremented(if possible) on `wait`
+//!If decrement is not possible (i.e. state is 0) then it awaits for state to get incremented.
 //!
 //!Meanwhile `signal` increments the counter. If any other tried is locked in `wait`, then it also
 //!wakes one of  the locked threads.
+//!
+//!```rust
+//! use semka::{Sem, CountingSemaphore};
+//! let sem = Sem::new(0).unwrap();
+//!
+//! assert!(sem.try_lock().is_none());
+//! sem.signal();
+//! sem.signal();
+//! let _guard = sem.lock();
+//! assert!(sem.try_wait());
+//! assert!(!sem.try_wait());
+//!
+//! drop(_guard);
+//! assert!(sem.try_wait());
+//!```
 //!
 //!## Platform implementation
 //!
 //!#### Windows
 //!
-//!Uses winapi `CreateSemaphoreW` and fully implements `CountingSemaphore` interface
+//!Uses winapi `CreateSemaphoreW`.
+//!
+//!Implements `CountingSemaphore` interface
 //!
 //!#### POSIX
 //!
 //!All POSIX-compliant systems uses `sem_init`
-//!But it must be noted that `Semaphore::wait_timeout` can be interrupted by the signal
+//!But it must be noted that awaiting can be interrupted by the signal
 //!
 //!POSIX implementation relies on [libc](https://github.com/rust-lang/libc)
 //!
@@ -71,6 +97,9 @@ pub use atomic::Sem;
 ///
 ///It's state can be described as `bool`.
 ///Any attempt to `wait` would result in locking `self` (i.e. setting state to `true`)
+///Which means unless `lock` is dropped, any further `lock` would block calling thread.
+///
+///Any `CountingSemaphore` can be used as `BinarySemaphore` whenever it's initial count is `1`
 pub trait BinarySemaphore: Sized {
     ///Creates new instance, initially unlocked
     fn new() -> Option<Self>;
