@@ -1,7 +1,6 @@
 use core::ffi::c_void;
-#[allow(unused)]
-use core::convert::TryFrom;
-use core::mem;
+use core::{ptr, mem};
+use core::sync::atomic::{AtomicPtr, Ordering};
 
 #[repr(C)]
 struct TimeSpec {
@@ -37,11 +36,30 @@ extern "C" {
 
 ///MacOS semaphore based on mach API
 pub struct Sem {
-    handle: *mut c_void,
+    handle: AtomicPtr<c_void>
 }
 
-impl super::CountingSemaphore for Sem {
-    fn new(init: u32) -> Option<Self> {
+impl Sem {
+    ///Creates new uninit instance.
+    ///
+    ///It is UB to use it until `init` is called.
+    pub const unsafe fn new_uninit() -> Self {
+        Self {
+            handle: AtomicPtr::new(ptr::null_mut())
+        }
+    }
+
+    #[must_use]
+    ///Initializes semaphore with provided `init` as initial value.
+    ///
+    ///Returns `true` on success.
+    ///
+    ///Returns `false` if semaphore is already initialized or initialization failed.
+    pub fn init(&self, init: u32) -> bool {
+        if !self.handle.load(Ordering::Acquire).is_null() {
+            return false;
+        }
+
         let mut handle = mem::MaybeUninit::uninit();
 
         let res = unsafe {
@@ -49,48 +67,76 @@ impl super::CountingSemaphore for Sem {
         };
 
         match res {
-            0 => Some(Self {
-                handle: unsafe { handle.assume_init() },
-            }),
-            _ => None,
+            0 => unsafe {
+                self.handle.store(handle.assume_init(), Ordering::Release);
+                true
+            },
+            _ => false,
         }
     }
 
-    fn wait(&self) {
+    ///Creates new instance, initializing it with `init`
+    pub fn new(init: u32) -> Option<Self> {
         let result = unsafe {
-            semaphore_wait(self.handle)
+            Self::new_uninit()
+        };
+
+        if result.init(init) {
+            Some(result)
+        } else {
+            None
+        }
+    }
+
+    ///Decrements self, returning immediately if it was signaled.
+    ///
+    ///Otherwise awaits for signal.
+    pub fn wait(&self) {
+        let result = unsafe {
+            semaphore_wait(self.handle.load(Ordering::Acquire))
         };
 
         debug_assert_eq!(result, 0, "semaphore_wait() failed");
     }
 
     #[inline]
-    fn try_wait(&self) -> bool {
+    ///Attempts to decrement self, returning whether self was signaled or not.
+    ///
+    ///Returns `true` if self was signaled.
+    ///
+    ///Returns `false` otherwise.
+    pub fn try_wait(&self) -> bool {
         self.wait_timeout(core::time::Duration::from_secs(0))
     }
 
-    fn wait_timeout(&self, timeout: core::time::Duration) -> bool {
+    ///Attempts to decrement self within provided time, returning whether self was signaled or not.
+    ///
+    ///Returns `true` if self was signaled within specified timeout
+    ///
+    ///Returns `false` otherwise
+    pub fn wait_timeout(&self, timeout: core::time::Duration) -> bool {
         let result = unsafe {
-            semaphore_timedwait(self.handle, timeout.into())
+            semaphore_timedwait(self.handle.load(Ordering::Acquire), timeout.into())
         };
 
         debug_assert!(result == 0 || result == KERN_OPERATION_TIMED_OUT, "semaphore_timedwait() failed");
         result == 0
     }
 
-    fn signal(&self) {
+    ///Increments self, waking any awaiting thread as result.
+    pub fn signal(&self) {
         let res = unsafe {
-            semaphore_signal(self.handle)
+            semaphore_signal(self.handle.load(Ordering::Acquire))
         };
 
-        debug_assert_eq!(res, 0);
+        debug_assert_eq!(res, 0, "semaphore_signal() failed");
     }
 }
 
 impl Drop for Sem {
     fn drop(&mut self) {
         unsafe {
-            semaphore_destroy(mach_task_self_, self.handle);
+            semaphore_destroy(mach_task_self_, self.handle.load(Ordering::Acquire));
         }
     }
 }

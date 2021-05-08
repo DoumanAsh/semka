@@ -1,5 +1,6 @@
 use core::ptr;
 use core::ffi::c_void;
+use core::sync::atomic::{AtomicPtr, Ordering};
 
 const WAIT_OBJECT_0: u32 = 0;
 const WAIT_TIMEOUT: u32 = 0x00000102;
@@ -14,27 +15,57 @@ extern "system" {
 
 ///Windows implementation of Semaphore
 pub struct Sem {
-    handle: *mut c_void
+    handle: AtomicPtr<c_void>
 }
 
-impl super::CountingSemaphore for Sem {
-    fn new(init: u32) -> Option<Self> {
+impl Sem {
+    ///Creates new uninit instance.
+    ///
+    ///It is UB to use it until `init` is called.
+    pub const unsafe fn new_uninit() -> Self {
+        Self {
+            handle: AtomicPtr::new(ptr::null_mut())
+        }
+    }
+
+    #[must_use]
+    ///Initializes semaphore with provided `init` as initial value.
+    ///
+    ///Returns `true` on success.
+    ///
+    ///Returns `false` if semaphore is already initialized or initialization failed.
+    pub fn init(&self, init: u32) -> bool {
+        if !self.handle.load(Ordering::Acquire).is_null() {
+            return false;
+        }
+
         let handle = unsafe {
             CreateSemaphoreW(ptr::null_mut(), init as i32, i32::max_value(), ptr::null())
         };
 
-        if handle.is_null() {
-            None
+        self.handle.store(handle, Ordering::Release);
+        !handle.is_null()
+    }
+
+    ///Creates new instance, initializing it with `init`
+    pub fn new(init: u32) -> Option<Self> {
+        let result = unsafe {
+            Self::new_uninit()
+        };
+
+        if result.init(init) {
+            Some(result)
         } else {
-            Some(Self {
-                handle
-            })
+            None
         }
     }
 
-    fn wait(&self) {
+    ///Decrements self, returning immediately if it was signaled.
+    ///
+    ///Otherwise awaits for signal.
+    pub fn wait(&self) {
         let result = unsafe {
-            WaitForSingleObject(self.handle, INFINITE)
+            WaitForSingleObject(self.handle.load(Ordering::Acquire), INFINITE)
         };
 
         match result {
@@ -45,15 +76,25 @@ impl super::CountingSemaphore for Sem {
     }
 
     #[inline]
-    fn try_wait(&self) -> bool {
+    ///Attempts to decrement self, returning whether self was signaled or not.
+    ///
+    ///Returns `true` if self was signaled.
+    ///
+    ///Returns `false` otherwise.
+    pub fn try_wait(&self) -> bool {
         self.wait_timeout(core::time::Duration::from_secs(0))
     }
 
-    fn wait_timeout(&self, timeout: core::time::Duration) -> bool {
+    ///Attempts to decrement self within provided time, returning whether self was signaled or not.
+    ///
+    ///Returns `true` if self was signaled within specified timeout
+    ///
+    ///Returns `false` otherwise
+    pub fn wait_timeout(&self, timeout: core::time::Duration) -> bool {
         use core::convert::TryInto;
 
         let result = unsafe {
-            WaitForSingleObject(self.handle, timeout.as_secs().try_into().unwrap_or(u32::max_value()))
+            WaitForSingleObject(self.handle.load(Ordering::Acquire), timeout.as_secs().try_into().unwrap_or(u32::max_value()))
         };
 
         match result {
@@ -63,9 +104,10 @@ impl super::CountingSemaphore for Sem {
         }
     }
 
-    fn signal(&self) {
+    ///Increments self, waking any awaiting thread as result.
+    pub fn signal(&self) {
         let res = unsafe {
-            ReleaseSemaphore(self.handle, 1, ptr::null_mut())
+            ReleaseSemaphore(self.handle.load(Ordering::Acquire), 1, ptr::null_mut())
         };
         debug_assert_ne!(res, 0);
     }
@@ -74,7 +116,7 @@ impl super::CountingSemaphore for Sem {
 impl Drop for Sem {
     fn drop(&mut self) {
         unsafe {
-            CloseHandle(self.handle);
+            CloseHandle(self.handle.load(Ordering::Acquire));
         }
     }
 }
