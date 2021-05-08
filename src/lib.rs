@@ -9,7 +9,8 @@
 //!#### POSIX
 //!
 //!All POSIX-compliant systems uses `sem_init`
-//!But it must be noted that awaiting can be interrupted by the signal
+//!But it must be noted that awaiting can be interrupted by the signal, although implementation
+//!tries its best to handle these cases
 //!
 //!POSIX implementation relies on [libc](https://github.com/rust-lang/libc)
 //!

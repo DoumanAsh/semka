@@ -94,7 +94,7 @@ impl Sem {
         use core::convert::TryInto;
 
         let result = unsafe {
-            WaitForSingleObject(self.handle.load(Ordering::Acquire), timeout.as_secs().try_into().unwrap_or(u32::max_value()))
+            WaitForSingleObject(self.handle.load(Ordering::Acquire), timeout.as_millis().try_into().unwrap_or(u32::max_value()))
         };
 
         match result {

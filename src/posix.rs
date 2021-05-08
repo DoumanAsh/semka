@@ -1,7 +1,6 @@
 use core::mem;
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicBool, Ordering};
-use core::convert::TryFrom;
 
 use error_code::PosixError;
 
@@ -32,17 +31,12 @@ impl Sem {
     ///Returns `false` if semaphore is already initialized or initialization failed.
     pub fn init(&self, init: u32) -> bool {
         if let Ok(false) = self.is_init.compare_exchange(false, true, Ordering::SeqCst, Ordering::Acquire) {
-            let mut handle = mem::MaybeUninit::uninit();
-
             let res = unsafe {
-                libc::sem_init(handle.as_mut_ptr(), 0, init as _)
+                libc::sem_init(self.handle.get() as _, 0, init as _)
             };
 
             match res {
-                0 => unsafe {
-                    *self.handle.get() = handle;
-                    true
-                },
+                0 => true,
                 _ => false,
             }
         } else {
@@ -113,11 +107,21 @@ impl Sem {
     ///Returns `true` if self was signaled within specified timeout
     ///
     ///Returns `false` otherwise
-    pub fn wait_timeout(&self, timeout: core::time::Duration) -> bool {
-        let timeout = libc::timespec {
-            tv_sec: timeout.as_secs() as libc::time_t,
-            tv_nsec: libc::suseconds_t::try_from(timeout.subsec_nanos()).unwrap_or(libc::suseconds_t::max_value()),
+    pub fn wait_timeout(&self, duration: core::time::Duration) -> bool {
+        let mut timeout = mem::MaybeUninit::uninit();
+        if unsafe { libc::clock_gettime(libc::CLOCK_REALTIME, timeout.as_mut_ptr()) } == -1 {
+            panic!("Failed to get current time");
+        }
+
+        let mut timeout = unsafe {
+            timeout.assume_init()
         };
+        timeout.tv_sec = timeout.tv_sec.saturating_add(duration.as_secs() as _);
+        timeout.tv_nsec = timeout.tv_nsec.saturating_add(duration.subsec_nanos() as _);
+        if timeout.tv_nsec > 999999999 {
+            timeout.tv_nsec = 0;
+            timeout.tv_sec = timeout.tv_sec.saturating_add(1);
+        }
 
         loop {
             let res = unsafe {
@@ -130,7 +134,9 @@ impl Sem {
                     break false;
                 }
 
-                debug_assert_eq!(errno.raw_code(), libc::EINTR, "Unexpected error");
+                if errno.raw_code() != libc::EINTR {
+                    panic!("Unexpected error: {}", errno);
+                }
                 continue;
             }
 

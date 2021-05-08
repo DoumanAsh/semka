@@ -1,4 +1,5 @@
 use semka::Sem;
+use std::time;
 
 #[test]
 fn should_fail_init_twice() {
@@ -29,4 +30,18 @@ fn should_return_when_signaled_counting() {
     assert!(sem.try_wait());
 
     assert!(!sem.try_wait());
+}
+
+#[test]
+fn should_timeout_on_wait() {
+    let sem = Sem::new(0).unwrap();
+    assert!(!sem.try_wait());
+
+    let before = time::Instant::now();
+    assert!(!sem.wait_timeout(time::Duration::from_millis(2500)));
+    let after = time::Instant::now();
+
+    let duration = after.duration_since(before);
+    println!("duration={:?}", duration);
+    assert!(duration.as_millis() > 2000 && duration.as_millis() < 3000);
 }
