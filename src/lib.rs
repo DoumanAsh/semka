@@ -24,6 +24,9 @@
 #![warn(missing_docs)]
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::style))]
 
+#[cfg(not(any(windows, unix, target_os = "fuchsia")))]
+compile_error!("Semaphore is not available for your target");
+
 #[cfg(any(all(unix, not(any(target_os = "macos", target_os = "ios"))), target_os = "fuchsia"))]
 mod posix;
 #[cfg(any(all(unix, not(any(target_os = "macos", target_os = "ios"))), target_os = "fuchsia"))]
