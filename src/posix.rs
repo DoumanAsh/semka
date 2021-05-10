@@ -1,15 +1,19 @@
 use core::mem;
 use core::cell::UnsafeCell;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicU8, Ordering};
 
 use error_code::PosixError;
+
+const UNINIT: u8 = 0;
+const INITING: u8 = 0b01;
+const INITED: u8 = 0b10;
 
 ///POSIX implementation of Semaphore
 ///
 ///Note: `wait_timeout` returns false on interrupt by signal
 pub struct Sem {
     handle: UnsafeCell<mem::MaybeUninit<libc::sem_t>>,
-    is_init: AtomicBool,
+    state: AtomicU8,
 }
 
 impl Sem {
@@ -19,7 +23,7 @@ impl Sem {
     pub const unsafe fn new_uninit() -> Self {
         Self {
             handle: UnsafeCell::new(mem::MaybeUninit::uninit()),
-            is_init: AtomicBool::new(false),
+            state: AtomicU8::new(UNINIT),
         }
     }
 
@@ -30,16 +34,23 @@ impl Sem {
     ///
     ///Returns `false` if semaphore is already initialized or initialization failed.
     pub fn init(&self, init: u32) -> bool {
-        if let Ok(false) = self.is_init.compare_exchange(false, true, Ordering::SeqCst, Ordering::Acquire) {
+        if let Ok(UNINIT) = self.state.compare_exchange(UNINIT, INITING, Ordering::SeqCst, Ordering::Acquire) {
             let res = unsafe {
                 libc::sem_init(self.handle.get() as _, 0, init as _)
             };
 
             match res {
-                0 => true,
+                0 => {
+                    self.state.store(INITED, Ordering::Release);
+                    true
+                },
                 _ => false,
             }
         } else {
+            while self.state.load(Ordering::Acquire) != INITED {
+                 core::hint::spin_loop();
+            }
+
             false
         }
     }
@@ -155,8 +166,10 @@ impl Sem {
 
 impl Drop for Sem {
     fn drop(&mut self) {
-        unsafe {
-            libc::sem_destroy(mem::transmute(self.handle.get()));
+        if self.state.load(Ordering::Relaxed) == INITED {
+            unsafe {
+                libc::sem_destroy(mem::transmute(self.handle.get()));
+            }
         }
     }
 }

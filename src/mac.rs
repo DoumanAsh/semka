@@ -135,8 +135,11 @@ impl Sem {
 
 impl Drop for Sem {
     fn drop(&mut self) {
-        unsafe {
-            semaphore_destroy(mach_task_self_, self.handle.load(Ordering::Acquire));
+        let handle = self.handle.load(Ordering::Relaxed);
+        if !handle.is_null() {
+            unsafe {
+                semaphore_destroy(mach_task_self_, handle);
+            }
         }
     }
 }

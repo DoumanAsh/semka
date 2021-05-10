@@ -115,8 +115,11 @@ impl Sem {
 
 impl Drop for Sem {
     fn drop(&mut self) {
-        unsafe {
-            CloseHandle(self.handle.load(Ordering::Acquire));
+        let handle = self.handle.load(Ordering::Relaxed);
+        if !handle.is_null() {
+            unsafe {
+                CloseHandle(handle);
+            }
         }
     }
 }
