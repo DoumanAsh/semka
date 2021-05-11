@@ -68,8 +68,14 @@ impl Sem {
 
         match res {
             0 => unsafe {
-                self.handle.store(handle.assume_init(), Ordering::Release);
-                true
+                let handle = handle.assume_init();
+                match self.handle.compare_exchange(ptr::null_mut(), handle, Ordering::SeqCst, Ordering::Acquire) {
+                    Ok(_) => true,
+                    Err(_) => {
+                        semaphore_destroy(mach_task_self_, handle);
+                        false
+                    }
+                }
             },
             _ => false,
         }

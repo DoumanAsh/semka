@@ -43,8 +43,15 @@ impl Sem {
             CreateSemaphoreW(ptr::null_mut(), init as i32, i32::max_value(), ptr::null())
         };
 
-        self.handle.store(handle, Ordering::Release);
-        !handle.is_null()
+        match self.handle.compare_exchange(ptr::null_mut(), handle, Ordering::SeqCst, Ordering::Acquire) {
+            Ok(_) => !handle.is_null(),
+            Err(_) => {
+                unsafe {
+                    CloseHandle(handle);
+                }
+                false
+            }
+        }
     }
 
     ///Creates new instance, initializing it with `init`
