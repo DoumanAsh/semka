@@ -9,8 +9,6 @@ const INITING: u8 = 0b01;
 const INITED: u8 = 0b10;
 
 ///POSIX implementation of Semaphore
-///
-///Note: `wait_timeout` returns false on interrupt by signal
 pub struct Sem {
     handle: UnsafeCell<mem::MaybeUninit<libc::sem_t>>,
     state: AtomicU8,
