@@ -42,7 +42,10 @@ impl Sem {
                     self.state.store(INITED, Ordering::Release);
                     true
                 },
-                _ => false,
+                _ => {
+                    self.state.store(UNINIT, Ordering::Release);
+                    false
+                },
             }
         } else {
             while self.state.load(Ordering::Acquire) != INITED {
