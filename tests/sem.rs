@@ -2,6 +2,34 @@ use semka::Sem;
 use std::time;
 
 #[test]
+fn should_init_after_close() {
+    let sem = Sem::new(0).unwrap();
+
+    assert!(!sem.init(0));
+
+    unsafe {
+        sem.close();
+        sem.close();
+    }
+
+    assert!(sem.init(0));
+    assert!(!sem.init(0));
+
+    assert!(!sem.try_wait());
+    sem.signal();
+    sem.signal();
+    assert!(sem.try_wait());
+    assert!(sem.try_wait());
+
+    assert!(!sem.try_wait());
+
+    unsafe {
+        sem.close();
+        sem.close();
+    }
+}
+
+#[test]
 fn should_fail_init_twice() {
     let sem = unsafe {
         Sem::new_uninit()

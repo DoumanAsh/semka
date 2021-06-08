@@ -163,14 +163,23 @@ impl Sem {
         };
         debug_assert_eq!(res, 0);
     }
+
+
+    ///Performs deinitialization.
+    ///
+    ///Using `Sem` after `close` is undefined behaviour, unless `init` is called
+    pub unsafe fn close(&self) {
+        let handle = self.handle.get();
+        if let Ok(INITED) = self.state.compare_exchange(INITED, UNINIT, Ordering::SeqCst, Ordering::Acquire) {
+            libc::sem_destroy(mem::transmute(handle));
+        }
+    }
 }
 
 impl Drop for Sem {
     fn drop(&mut self) {
-        if self.state.load(Ordering::Relaxed) == INITED {
-            unsafe {
-                libc::sem_destroy(mem::transmute(self.handle.get()));
-            }
+        unsafe {
+            self.close();
         }
     }
 }

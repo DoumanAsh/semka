@@ -118,15 +118,23 @@ impl Sem {
         };
         debug_assert_ne!(res, 0);
     }
+
+
+    ///Performs deinitialization.
+    ///
+    ///Using `Sem` after `close` is undefined behaviour, unless `init` is called
+    pub unsafe fn close(&self) {
+        let handle = self.handle.swap(ptr::null_mut(), Ordering::AcqRel);
+        if !handle.is_null() {
+            CloseHandle(handle);
+        }
+    }
 }
 
 impl Drop for Sem {
     fn drop(&mut self) {
-        let handle = self.handle.load(Ordering::Relaxed);
-        if !handle.is_null() {
-            unsafe {
-                CloseHandle(handle);
-            }
+        unsafe {
+            self.close();
         }
     }
 }
