@@ -2,6 +2,8 @@ use core::ptr;
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicPtr, Ordering};
 
+use crate::unlikely;
+
 const WAIT_OBJECT_0: u32 = 0;
 const WAIT_TIMEOUT: u32 = 0x00000102;
 const INFINITE: u32 = 0xFFFFFFFF;
@@ -36,7 +38,7 @@ impl Sem {
     ///Returns `false` if semaphore is already initialized or initialization failed.
     pub fn init(&self, init: u32) -> bool {
         if !self.handle.load(Ordering::Acquire).is_null() {
-            return false;
+            return unlikely(false);
         }
 
         let handle = unsafe {
@@ -49,7 +51,7 @@ impl Sem {
                 unsafe {
                     CloseHandle(handle);
                 }
-                false
+                unlikely(false)
             }
         }
     }
@@ -63,7 +65,7 @@ impl Sem {
         if result.init(init) {
             Some(result)
         } else {
-            None
+            unlikely(None)
         }
     }
 

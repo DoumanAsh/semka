@@ -4,6 +4,8 @@ use core::sync::atomic::{AtomicU8, Ordering};
 
 use error_code::PosixError;
 
+use crate::unlikely;
+
 const UNINIT: u8 = 0;
 const INITING: u8 = 0b01;
 const INITED: u8 = 0b10;
@@ -44,7 +46,7 @@ impl Sem {
                 },
                 _ => {
                     self.state.store(UNINIT, Ordering::Release);
-                    false
+                    unlikely(false)
                 },
             }
         } else {
@@ -52,7 +54,7 @@ impl Sem {
                  core::hint::spin_loop();
             }
 
-            false
+            unlikely(false)
         }
     }
 
@@ -65,7 +67,7 @@ impl Sem {
         if result.init(init) {
             Some(result)
         } else {
-            None
+            unlikely(None)
         }
     }
 
