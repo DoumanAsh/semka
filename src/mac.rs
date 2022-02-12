@@ -2,8 +2,6 @@ use core::ffi::c_void;
 use core::{ptr, mem};
 use core::sync::atomic::{AtomicPtr, Ordering};
 
-use crate::unlikely;
-
 #[repr(C)]
 struct TimeSpec {
     tv_sec: libc::c_uint,
@@ -59,7 +57,7 @@ impl Sem {
     ///Returns `false` if semaphore is already initialized or initialization failed.
     pub fn init(&self, init: u32) -> bool {
         if !self.handle.load(Ordering::Acquire).is_null() {
-            return unlikely(false);
+            return false;
         }
 
         let mut handle = mem::MaybeUninit::uninit();
@@ -75,11 +73,11 @@ impl Sem {
                     Ok(_) => true,
                     Err(_) => {
                         semaphore_destroy(mach_task_self_, handle);
-                        unlikely(false)
+                        false
                     }
                 }
             },
-            _ => unlikely(false),
+            _ => false,
         }
     }
 
@@ -92,7 +90,7 @@ impl Sem {
         if result.init(init) {
             Some(result)
         } else {
-            unlikely(None)
+            None
         }
     }
 

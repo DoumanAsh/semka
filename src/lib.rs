@@ -24,12 +24,6 @@
 #![warn(missing_docs)]
 #![cfg_attr(feature = "cargo-clippy", allow(clippy::style))]
 
-#[cold]
-#[inline(never)]
-fn unlikely<T>(result: T) -> T {
-    result
-}
-
 #[cfg(not(any(windows, unix, target_os = "fuchsia")))]
 compile_error!("Semaphore is not available for your target");
 
