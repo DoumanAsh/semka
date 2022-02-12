@@ -2,6 +2,8 @@ use core::ffi::c_void;
 use core::{ptr, mem};
 use core::sync::atomic::{AtomicPtr, Ordering};
 
+use crate::unlikely;
+
 #[repr(C)]
 struct TimeSpec {
     tv_sec: libc::c_uint,
@@ -49,6 +51,12 @@ impl Sem {
         }
     }
 
+    #[inline(always)]
+    ///Returns whether semaphore is successfully initialized
+    pub fn is_init(&self) -> bool {
+        !self.handle.load(Ordering::Acquire).is_null()
+    }
+
     #[must_use]
     ///Initializes semaphore with provided `init` as initial value.
     ///
@@ -57,27 +65,30 @@ impl Sem {
     ///Returns `false` if semaphore is already initialized or initialization failed.
     pub fn init(&self, init: u32) -> bool {
         if !self.handle.load(Ordering::Acquire).is_null() {
+            //Similarly to `Once` we give priority to already-init path
             return false;
-        }
+        } else {
+            let mut handle = mem::MaybeUninit::uninit();
 
-        let mut handle = mem::MaybeUninit::uninit();
+            let res = unsafe {
+                semaphore_create(mach_task_self_, handle.as_mut_ptr(), SYNC_POLICY_FIFO, init as libc::c_int)
+            };
 
-        let res = unsafe {
-            semaphore_create(mach_task_self_, handle.as_mut_ptr(), SYNC_POLICY_FIFO, init as libc::c_int)
-        };
-
-        match res {
-            0 => unsafe {
-                let handle = handle.assume_init();
-                match self.handle.compare_exchange(ptr::null_mut(), handle, Ordering::SeqCst, Ordering::Acquire) {
-                    Ok(_) => true,
-                    Err(_) => {
-                        semaphore_destroy(mach_task_self_, handle);
-                        false
+            let res = match res {
+                0 => unsafe {
+                    let handle = handle.assume_init();
+                    match self.handle.compare_exchange(ptr::null_mut(), handle, Ordering::SeqCst, Ordering::Acquire) {
+                        Ok(_) => true,
+                        Err(_) => {
+                            semaphore_destroy(mach_task_self_, handle);
+                            false
+                        }
                     }
-                }
-            },
-            _ => false,
+                },
+                _ => false,
+            };
+
+            unlikely(res)
         }
     }
 
@@ -90,7 +101,7 @@ impl Sem {
         if result.init(init) {
             Some(result)
         } else {
-            None
+            unlikely(None)
         }
     }
 

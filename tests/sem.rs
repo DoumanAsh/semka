@@ -5,6 +5,7 @@ use std::time;
 fn should_init_after_close() {
     let sem = Sem::new(0).unwrap();
 
+    assert!(sem.is_init());
     assert!(!sem.init(0));
 
     unsafe {
@@ -35,8 +36,10 @@ fn should_fail_init_twice() {
         Sem::new_uninit()
     };
 
+    assert!(!sem.is_init());
     assert!(sem.init(0));
     assert!(!sem.init(0));
+    assert!(sem.is_init());
 
     assert!(!sem.try_wait());
     sem.signal();

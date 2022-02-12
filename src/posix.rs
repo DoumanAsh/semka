@@ -4,6 +4,8 @@ use core::sync::atomic::{AtomicU8, Ordering};
 
 use error_code::PosixError;
 
+use crate::unlikely;
+
 const UNINIT: u8 = 0;
 const INITING: u8 = 0b01;
 const INITED: u8 = 0b10;
@@ -25,6 +27,21 @@ impl Sem {
         }
     }
 
+    #[inline(always)]
+    ///Returns whether semaphore is successfully initialized
+    pub fn is_init(&self) -> bool {
+        self.state.load(Ordering::Acquire) == INITED
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn await_init(&self) {
+        //Wait for initialization to finish
+        while self.state.load(Ordering::Acquire) == INITING {
+            core::hint::spin_loop();
+        }
+    }
+
     #[must_use]
     ///Initializes semaphore with provided `init` as initial value.
     ///
@@ -37,19 +54,24 @@ impl Sem {
                 libc::sem_init(self.handle.get() as _, 0, init as _)
             };
 
-            match res {
+            let res = match res {
                 0 => {
                     self.state.store(INITED, Ordering::Release);
                     true
                 },
                 _ => {
+                    //TODO: assert against?
                     self.state.store(UNINIT, Ordering::Release);
                     false
                 },
-            }
+            };
+
+            unlikely(res)
         } else {
-            while self.state.load(Ordering::Acquire) != INITED {
-                 core::hint::spin_loop();
+            //Similarly to `Once` we give priority to already-init path
+            //although we do need to make sure it is finished
+            if self.state.load(Ordering::Acquire) != INITED {
+                self.await_init();
             }
 
             false
@@ -65,7 +87,7 @@ impl Sem {
         if result.init(init) {
             Some(result)
         } else {
-            None
+            unlikely(None)
         }
     }
 

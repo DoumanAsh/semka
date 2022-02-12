@@ -2,6 +2,8 @@ use core::ptr;
 use core::ffi::c_void;
 use core::sync::atomic::{AtomicPtr, Ordering};
 
+use crate::unlikely;
+
 const WAIT_OBJECT_0: u32 = 0;
 const WAIT_TIMEOUT: u32 = 0x00000102;
 const INFINITE: u32 = 0xFFFFFFFF;
@@ -28,6 +30,12 @@ impl Sem {
         }
     }
 
+    #[inline(always)]
+    ///Returns whether semaphore is successfully initialized
+    pub fn is_init(&self) -> bool {
+        !self.handle.load(Ordering::Acquire).is_null()
+    }
+
     #[must_use]
     ///Initializes semaphore with provided `init` as initial value.
     ///
@@ -36,21 +44,24 @@ impl Sem {
     ///Returns `false` if semaphore is already initialized or initialization failed.
     pub fn init(&self, init: u32) -> bool {
         if !self.handle.load(Ordering::Acquire).is_null() {
+            //Similarly to `Once` we give priority to already-init path
             return false;
-        }
+        } else {
+            let handle = unsafe {
+                CreateSemaphoreW(ptr::null_mut(), init as i32, i32::max_value(), ptr::null())
+            };
 
-        let handle = unsafe {
-            CreateSemaphoreW(ptr::null_mut(), init as i32, i32::max_value(), ptr::null())
-        };
-
-        match self.handle.compare_exchange(ptr::null_mut(), handle, Ordering::SeqCst, Ordering::Acquire) {
-            Ok(_) => !handle.is_null(),
-            Err(_) => {
-                unsafe {
-                    CloseHandle(handle);
+            let res = match self.handle.compare_exchange(ptr::null_mut(), handle, Ordering::SeqCst, Ordering::Acquire) {
+                Ok(_) => !handle.is_null(),
+                Err(_) => {
+                    unsafe {
+                        CloseHandle(handle);
+                    }
+                    unlikely(false)
                 }
-                false
-            }
+            };
+
+            unlikely(res)
         }
     }
 
@@ -63,7 +74,7 @@ impl Sem {
         if result.init(init) {
             Some(result)
         } else {
-            None
+            unlikely(None)
         }
     }
 
