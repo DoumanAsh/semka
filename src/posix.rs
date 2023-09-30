@@ -2,7 +2,7 @@ use core::mem;
 use core::cell::UnsafeCell;
 use core::sync::atomic::{AtomicU8, Ordering};
 
-use error_code::PosixError;
+use error_code::ErrorCode;
 
 use crate::unlikely;
 
@@ -101,7 +101,7 @@ impl Sem {
             };
 
             if res == -1 {
-                let errno = PosixError::last();
+                let errno = ErrorCode::last_posix();
                 debug_assert_eq!(errno.raw_code(), libc::EINTR, "Unexpected error");
                 continue;
             }
@@ -123,12 +123,12 @@ impl Sem {
             };
 
             if res == -1 {
-                let errno = PosixError::last();
-                if errno.is_would_block() {
+                let errno = ErrorCode::last_posix().raw_code();
+                if errno == libc::EAGAIN || errno == libc::EWOULDBLOCK {
                     break false;
                 }
 
-                debug_assert_eq!(errno.raw_code(), libc::EINTR, "Unexpected error");
+                debug_assert_eq!(errno, libc::EINTR, "Unexpected error");
                 continue;
             }
 
@@ -163,8 +163,8 @@ impl Sem {
             };
 
             if res == -1 {
-                let errno = PosixError::last();
-                if errno.is_would_block() || errno.raw_code() == libc::ETIMEDOUT {
+                let errno = ErrorCode::last_posix();
+                if errno.raw_code() == libc::EAGAIN || errno.raw_code() == libc::EWOULDBLOCK || errno.raw_code() == libc::ETIMEDOUT {
                     break false;
                 }
 
